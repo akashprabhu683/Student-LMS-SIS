@@ -1,12 +1,15 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { getRoleDashboardPath } from "@/lib/rbac";
 
 export default async function HomePage() {
   const user = await getCurrentUser();
 
   if (user) {
-    redirect(getRoleDashboardPath(user.role));
+    if (user.role === "MENTOR") {
+      redirect("/dashboard/mentor");
+    } else {
+      redirect("/dashboard/student");
+    }
   } else {
     redirect("/login");
   }

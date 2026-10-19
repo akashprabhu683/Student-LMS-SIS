@@ -7,44 +7,17 @@ export async function GET(req: NextRequest) {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { searchParams } = new URL(req.url);
-    const studentId = searchParams.get("studentId");
-    const subjectId = searchParams.get("subjectId");
-
-    // Student role can ONLY view their own records
-    let targetStudentId = studentId;
-    if (user.role === "STUDENT") {
-      if (!user.studentProfileId) {
-        return NextResponse.json({ error: "No student profile found" }, { status: 400 });
-      }
-      targetStudentId = user.studentProfileId;
-    }
-
-    const where: any = {};
-    if (targetStudentId) where.studentId = targetStudentId;
-    if (subjectId) {
-      where.session = { subjectId };
-    }
+    const targetStudentId = user.role === "STUDENT" ? user.id : req.nextUrl.searchParams.get("studentId") || undefined;
 
     const records = await prisma.attendanceRecord.findMany({
-      where,
+      where: targetStudentId ? { studentId: targetStudentId } : {},
       include: {
-        session: {
-          include: {
-            subject: true,
-            class: true,
-            faculty: { include: { user: { select: { name: true } } } },
-          },
-        },
-        student: {
-          include: { user: { select: { name: true, email: true } } },
-        },
+        session: true,
+        student: { select: { id: true, name: true, email: true } },
       },
-      orderBy: { session: { sessionDate: "desc" } },
-      take: 200,
+      orderBy: { markedAt: "desc" },
     });
 
-    // Compute attendance statistics
     const total = records.length;
     const present = records.filter((r) => r.status === "PRESENT" || r.status === "ON_DUTY").length;
     const late = records.filter((r) => r.status === "LATE").length;
@@ -53,16 +26,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       records,
-      stats: {
-        total,
-        present,
-        late,
-        absent,
-        percentage,
-      },
+      stats: { total, present, late, absent, percentage },
     });
   } catch (error) {
-    console.error("Attendance records error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to load attendance records" }, { status: 500 });
   }
 }

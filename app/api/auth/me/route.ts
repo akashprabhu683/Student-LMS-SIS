@@ -5,9 +5,7 @@ import prisma from "@/lib/prisma";
 export async function GET() {
   try {
     const session = await getCurrentUser();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const user = await prisma.user.findUnique({
       where: { id: session.id },
@@ -16,37 +14,12 @@ export async function GET() {
         email: true,
         name: true,
         role: true,
-        status: true,
-        avatarUrl: true,
-        institutionId: true,
-        studentProfile: {
-          include: {
-            department: true,
-            program: true,
-            enrollments: {
-              include: { class: true },
-            },
-            mentorAllocations: {
-              where: { isActive: true },
-              include: { mentor: { include: { user: true } } },
-            },
-          },
-        },
-        facultyProfile: {
-          include: {
-            department: true,
-          },
-        },
+        mentor: { select: { id: true, name: true, email: true } },
       },
     });
 
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
     return NextResponse.json({ user });
   } catch (error) {
-    console.error("Get current user error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to load user" }, { status: 500 });
   }
 }
