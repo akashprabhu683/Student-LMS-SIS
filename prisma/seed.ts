@@ -361,6 +361,7 @@ async function main() {
       title: "Problem Set 1: Dynamic Programming Analysis",
       description: "Implement Bellman-Ford and analyze edge relaxation on DAGs with negative weights.",
       maxMarks: 100,
+      issueDate: new Date(),
       dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
       status: "PUBLISHED",
       targets: {
