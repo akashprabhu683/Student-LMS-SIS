@@ -7,154 +7,48 @@ export async function GET() {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    if (user.role === "SUPER_ADMIN") {
-      const [
-        totalStudents,
-        totalFaculty,
-        totalDepartments,
-        totalClasses,
-        totalAssignments,
-        totalSubmissions,
-        attendanceCount,
-        recentAudits,
-      ] = await Promise.all([
-        prisma.studentProfile.count(),
-        prisma.facultyProfile.count(),
-        prisma.department.count(),
-        prisma.class.count(),
-        prisma.assignment.count(),
-        prisma.submission.count(),
-        prisma.attendanceRecord.count(),
-        prisma.auditLog.findMany({
-          take: 8,
-          orderBy: { createdAt: "desc" },
-          include: { performedBy: { select: { name: true, email: true } } },
-        }),
+    if (user.role === "MENTOR") {
+      const [totalStudents, totalTasks, pendingSubmissions, totalSessions] = await Promise.all([
+        prisma.user.count({ where: { role: "STUDENT" } }),
+        prisma.task.count(),
+        prisma.submission.count({ where: { status: "SUBMITTED" } }),
+        prisma.attendanceSession.count(),
       ]);
-
-      return NextResponse.json({
-        stats: {
-          totalStudents,
-          totalFaculty,
-          totalDepartments,
-          totalClasses,
-          totalAssignments,
-          totalSubmissions,
-          attendanceCount,
-        },
-        recentAudits,
-      });
+      return NextResponse.json({ totalStudents, totalTasks, pendingSubmissions, totalSessions });
     }
 
-    if (user.role === "DEPARTMENT_ADMIN") {
-      const deptId = user.departmentId;
-      const [
-        deptStudents,
-        deptFaculty,
-        deptClasses,
-        deptSubjects,
-        deptAssignments,
-      ] = await Promise.all([
-        prisma.studentProfile.count({ where: { departmentId: deptId || undefined } }),
-        prisma.facultyProfile.count({ where: { departmentId: deptId || undefined } }),
-        prisma.class.count({ where: { departmentId: deptId || undefined } }),
-        prisma.subject.count({ where: { departmentId: deptId || undefined } }),
-        prisma.assignment.count({
-          where: { subject: { departmentId: deptId || undefined } },
-        }),
-      ]);
+    // Student
+    const [mySubmissions, totalTasks, attendanceRecords, totalSessions] = await Promise.all([
+      prisma.submission.findMany({
+        where: { studentId: user.id },
+        include: { task: true },
+      }),
+      prisma.task.count(),
+      prisma.attendanceRecord.findMany({ where: { studentId: user.id } }),
+      prisma.attendanceSession.count(),
+    ]);
 
-      return NextResponse.json({
-        stats: {
-          deptStudents,
-          deptFaculty,
-          deptClasses,
-          deptSubjects,
-          deptAssignments,
-        },
-      });
-    }
+    const attended = attendanceRecords.filter(r => r.status === "PRESENT" || r.status === "LATE").length;
+    const attendanceRate = totalSessions > 0 ? Math.round((attended / totalSessions) * 100) : 0;
+    const gradedSubmissions = mySubmissions.filter(s => s.score !== null);
+    const avgScore =
+      gradedSubmissions.length > 0
+        ? Math.round(
+            gradedSubmissions.reduce(
+              (acc, s) => acc + (s.score! / s.task.maxScore) * 100,
+              0
+            ) / gradedSubmissions.length
+          )
+        : 0;
 
-    if (user.role === "FACULTY" || user.role === "MENTOR") {
-      const facId = user.facultyProfileId;
-      const [
-        assignedAssignments,
-        pendingSubmissions,
-        menteesCount,
-        recentSessions,
-      ] = await Promise.all([
-        prisma.assignment.count({ where: { facultyId: facId || undefined } }),
-        prisma.submission.count({
-          where: {
-            assignment: { facultyId: facId || undefined },
-            status: "SUBMITTED",
-          },
-        }),
-        prisma.mentorAllocation.count({
-          where: { mentorId: facId || undefined, isActive: true },
-        }),
-        prisma.attendanceSession.findMany({
-          where: { facultyId: facId || undefined },
-          take: 5,
-          orderBy: { sessionDate: "desc" },
-          include: { class: true, subject: true },
-        }),
-      ]);
-
-      return NextResponse.json({
-        stats: {
-          assignedAssignments,
-          pendingSubmissions,
-          menteesCount,
-        },
-        recentSessions,
-      });
-    }
-
-    if (user.role === "STUDENT") {
-      const studentId = user.studentProfileId;
-      const [
-        attendanceRecords,
-        submissions,
-        mentorAllocation,
-      ] = await Promise.all([
-        prisma.attendanceRecord.findMany({
-          where: { studentId: studentId || undefined },
-        }),
-        prisma.submission.findMany({
-          where: { studentId: studentId || undefined },
-          include: { grade: true, assignment: true },
-        }),
-        prisma.mentorAllocation.findFirst({
-          where: { studentId: studentId || undefined, isActive: true },
-          include: {
-            mentor: {
-              include: { user: { select: { name: true, email: true } }, department: true },
-            },
-          },
-        }),
-      ]);
-
-      const totalAtt = attendanceRecords.length;
-      const presentAtt = attendanceRecords.filter((r) => r.status === "PRESENT" || r.status === "ON_DUTY").length;
-      const lateAtt = attendanceRecords.filter((r) => r.status === "LATE").length;
-      const attendancePercentage = totalAtt > 0 ? Math.round(((presentAtt + lateAtt * 0.5) / totalAtt) * 100) : 0;
-
-      return NextResponse.json({
-        stats: {
-          attendancePercentage,
-          totalSessions: totalAtt,
-          totalSubmissions: submissions.length,
-          gradedSubmissions: submissions.filter((s) => s.status === "GRADED").length,
-        },
-        mentor: mentorAllocation?.mentor || null,
-        recentSubmissions: submissions.slice(0, 5),
-      });
-    }
-
-    return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+    return NextResponse.json({
+      submissionsCount: mySubmissions.length,
+      totalTasks,
+      attendanceRate,
+      avgScore,
+    });
   } catch (error) {
-    console.error("Dashboard stats error:", error);
+    console.error("[dashboard/stats]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

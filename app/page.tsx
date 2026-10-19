@@ -1,3 +1,5 @@
+export const instant = false; // allow blocking prerender for cookie-based redirect
+
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 
