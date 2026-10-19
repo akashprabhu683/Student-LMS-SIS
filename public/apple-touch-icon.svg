@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+  <defs>
+    <linearGradient id="appleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="40" fill="url(#appleGrad)" />
+  <g fill="#ffffff">
+    <polygon points="90,45 146,70 90,95 34,70" />
+    <path d="M56,83 L56,108 C56,122 124,122 124,108 L124,83 L90,98 Z" opacity="0.9" />
+    <path d="M130,77 L138,102 L144,102 L144,110 L134,110 L134,102 L138,102 L131,79" fill="#fbbf24" />
+  </g>
+</svg>
